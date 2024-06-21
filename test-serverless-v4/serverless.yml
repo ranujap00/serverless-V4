@@ -1,0 +1,102 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: kaiju
+# "app" enables Serverless Framework Dashboard features and sharing them with other Services.
+app: test-project
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: test-serverless-v4
+
+provider:
+  name: aws
+  runtime: python3.12
+  stage: dev
+  region: ${file(./env.yml):${self:provider.stage}.REGION}
+  iam:
+    role:
+      statements:
+        - Effect: "Allow"
+          Action:
+            - "s3:*"
+          Resource: "*"
+  environment:
+    AWS_ACCOUNT_ID: ${file(./env.yml):${self:provider.stage}.AWS_ACCOUNT_ID}
+    REGION: ${file(./env.yml):${self:provider.stage}.REGION}
+    SERVICE: ${self:service}
+
+functions:
+  hello:
+    handler: hello.hello
+    role: APIFullAccess
+    vpc:
+      securityGroupIds:
+        - ${file(./env.yml):${self:provider.stage}.SECURITY_GROUP_ID}
+      subnetIds:
+        - ${file(./env.yml):${self:provider.stage}.SUBNET_ID}
+    events:
+      - httpApi:
+          path: /hello/{name}
+          method: get
+          cors:
+            allowedOrigins:
+              - '*'
+            allowedHeaders:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+            allowedMethods:
+              - OPTIONS
+              - GET
+
+
+resources:
+  Resources:
+    APIFullAccess:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: APIFullAccess-${self:service}-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: APIFullAccess-${self:service}-${self:provider.stage}
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: "Allow"
+                  Action:
+                    [
+                      "logs:CreateLogGroup",
+                      "logs:CreateLogStream",
+                      "logs:PutLogEvents",
+                      "ec2:CreateNetworkInterface",
+                      "ec2:DescribeNetworkInterfaces",
+                      "ec2:DeleteNetworkInterface",
+                      "ec2:AssignPrivateIpAddresses",
+                      "ec2:UnassignPrivateIpAddresses",
+                    ]
+                  Resource: "*"
+                - Effect: "Allow"
+                  Action:
+                    - "s3:*"
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - logs:*
+                  Resource:
+                    - arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action:
+                    - lambda:InvokeFunction
+                    - lambda:InvokeAsync
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - sts:AssumeRole
+                  Resource:
+                    - arn:aws:iam::*:role/*
